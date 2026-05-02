@@ -15,23 +15,20 @@ export function Footer() {
             <div className="text-[12px] uppercase tracking-widest text-ivory/60 mb-4">Shop</div>
             <ul className="space-y-2.5 text-sm text-ivory/85">
               <li><Link href="/products" className="hover:text-ember">All perfumes</Link></li>
-              <li><Link href="/products?category=woody" className="hover:text-ember">Woody</Link></li>
-              <li><Link href="/products?category=floral" className="hover:text-ember">Floral</Link></li>
-              <li><Link href="/products?category=fresh" className="hover:text-ember">Fresh</Link></li>
-              <li><Link href="/wholesale" className="hover:text-ember">Wholesale</Link></li>
             </ul>
           </div>
           <div>
-            <div className="text-[12px] uppercase tracking-widest text-ivory/60 mb-4">Brand</div>
+            <div className="text-[12px] uppercase tracking-widest text-ivory/60 mb-4">Customer care</div>
             <ul className="space-y-2.5 text-sm text-ivory/85">
-              <li><Link href="/about" className="hover:text-ember">Our story</Link></li>
               <li><Link href="/contact" className="hover:text-ember">Contact</Link></li>
               <li><Link href="/shipping" className="hover:text-ember">Shipping &amp; returns</Link></li>
             </ul>
           </div>
           <div>
-            <div className="text-[12px] uppercase tracking-widest text-ivory/60 mb-4">Legal</div>
+            <div className="text-[12px] uppercase tracking-widest text-ivory/60 mb-4">Company</div>
             <ul className="space-y-2.5 text-sm text-ivory/85">
+              <li><Link href="/about" className="hover:text-ember">Our story</Link></li>
+              <li><Link href="/wholesale" className="hover:text-ember">Wholesale</Link></li>
               <li><Link href="/privacy" className="hover:text-ember">Privacy</Link></li>
               <li><Link href="/terms" className="hover:text-ember">Terms</Link></li>
             </ul>
