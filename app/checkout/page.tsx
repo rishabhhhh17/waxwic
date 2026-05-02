@@ -3,11 +3,12 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import Script from 'next/script';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/lib/cart-store';
 import { formatINR } from '@/lib/utils';
 import { trackInitiateCheckout } from '@/lib/analytics/meta-pixel';
+import { applyCoupon, type CouponApplied } from '@/lib/coupons';
 
 declare global {
   interface Window {
@@ -47,6 +48,17 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponApplied | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+
+  const subtotal = totalPaise();
+  const payable = useMemo(() => {
+    if (!appliedCoupon) return subtotal;
+    const re = applyCoupon(subtotal, appliedCoupon.code);
+    return re ? re.payable_paise : subtotal;
+  }, [subtotal, appliedCoupon]);
+
   useEffect(() => {
     if (lines.length === 0) return;
     const contents = lines.map((l) => ({
@@ -55,11 +67,31 @@ export default function CheckoutPage() {
       item_price: l.unit_price_paise / 100,
     }));
     trackInitiateCheckout({
-      value: totalPaise() / 100,
+      value: payable / 100,
       contents,
       num_items: lines.reduce((a, l) => a + l.qty, 0),
     });
-  }, [lines, totalPaise]);
+  }, [lines, payable]);
+
+  function onApplyCoupon(e: React.FormEvent) {
+    e.preventDefault();
+    setCouponError(null);
+    const trimmed = couponInput.trim();
+    if (!trimmed) return;
+    const result = applyCoupon(subtotal, trimmed);
+    if (!result) {
+      setCouponError('Code not recognised.');
+      setAppliedCoupon(null);
+      return;
+    }
+    setAppliedCoupon(result);
+  }
+
+  function onRemoveCoupon() {
+    setAppliedCoupon(null);
+    setCouponInput('');
+    setCouponError(null);
+  }
 
   const update = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -112,13 +144,21 @@ export default function CheckoutPage() {
           },
           items,
           event_id,
+          coupon_code: appliedCoupon?.code ?? null,
         }),
       });
       if (!res.ok) {
         const t = await res.text();
         throw new Error(t || 'Could not create order');
       }
-      const order = (await res.json()) as { razorpay_order_id: string; amount: number; currency: string };
+      const order = (await res.json()) as {
+        razorpay_order_id: string;
+        amount: number;
+        currency: string;
+        subtotal_paise: number;
+        discount_paise: number;
+        coupon: { code: string; percent: number; description: string; bumped_to_min: boolean } | null;
+      };
 
       const Rzp = window.Razorpay;
       if (!Rzp) {
@@ -132,10 +172,10 @@ export default function CheckoutPage() {
         amount: order.amount,
         currency: order.currency,
         name: 'Waxwic',
-        description: `${lines.length} item${lines.length === 1 ? '' : 's'}`,
+        description: `${lines.length} item${lines.length === 1 ? '' : 's'}${order.coupon ? ` · ${order.coupon.code}` : ''}`,
         order_id: order.razorpay_order_id,
         prefill: { name: form.name, email: form.email, contact: form.phone },
-        notes: { event_id },
+        notes: { event_id, coupon: order.coupon?.code ?? '' },
         theme: { color: '#1B1A17' },
         handler: async (resp: {
           razorpay_order_id: string;
@@ -161,6 +201,9 @@ export default function CheckoutPage() {
               order_id: resp.razorpay_order_id,
               payment_id: resp.razorpay_payment_id,
               total_paise: order.amount,
+              subtotal_paise: order.subtotal_paise,
+              discount_paise: order.discount_paise,
+              coupon: order.coupon,
               customer: { name: form.name, email: form.email },
               shipping: form,
               lines,
@@ -271,7 +314,7 @@ export default function CheckoutPage() {
                 disabled={submitting}
                 className="w-full h-12 bg-ink text-ivory text-[12px] uppercase tracking-wider hover:bg-ink/90 disabled:opacity-50"
               >
-                {submitting ? 'Working…' : `Pay ${formatINR(totalPaise())}`}
+                {submitting ? 'Working…' : `Pay ${formatINR(payable)}`}
               </button>
               <p className="text-xs text-smoke">
                 You&rsquo;ll be redirected to Razorpay&rsquo;s secure modal. We never see or store card details.
@@ -295,10 +338,75 @@ export default function CheckoutPage() {
                 </li>
               ))}
             </ul>
-            <div className="mt-6 pt-5 border-t border-line space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-smoke">Subtotal</span><span className="tabular-nums">{formatINR(totalPaise())}</span></div>
-              <div className="flex justify-between"><span className="text-smoke">Shipping</span><span>Calculated by Razorpay</span></div>
-              <div className="flex justify-between font-display text-lg pt-3"><span>Total</span><span className="tabular-nums">{formatINR(totalPaise())}</span></div>
+
+            <div className="mt-5 pt-5 border-t border-line">
+              {appliedCoupon ? (
+                <div className="flex items-start justify-between gap-2 bg-ivory border border-moss/30 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="text-[11px] uppercase tracking-widest text-moss font-medium">
+                      {appliedCoupon.code} · {appliedCoupon.percent}% off
+                    </div>
+                    <div className="text-xs text-smoke truncate">{appliedCoupon.description}</div>
+                    {appliedCoupon.bumped_to_min && (
+                      <div className="text-[11px] text-smoke mt-1">
+                        Razorpay minimum &#8377;1 applied.
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onRemoveCoupon}
+                    className="text-xs text-smoke hover:text-ink uppercase tracking-wider shrink-0"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={onApplyCoupon} className="space-y-2">
+                  <label className="text-[11px] uppercase tracking-widest text-smoke">Discount code</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={couponInput}
+                      onChange={(e) => {
+                        setCouponInput(e.target.value);
+                        if (couponError) setCouponError(null);
+                      }}
+                      placeholder="WAX15"
+                      className="flex-1 h-10 px-3 bg-ivory border border-line focus:border-ink outline-none text-sm uppercase tracking-wider"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!couponInput.trim()}
+                      className="h-10 px-4 bg-ink text-ivory text-[11px] uppercase tracking-wider hover:bg-ink/90 disabled:opacity-50"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  {couponError && <div className="text-xs text-clay">{couponError}</div>}
+                </form>
+              )}
+            </div>
+
+            <div className="mt-5 pt-5 border-t border-line space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-smoke">Subtotal</span>
+                <span className="tabular-nums">{formatINR(subtotal)}</span>
+              </div>
+              {appliedCoupon && (
+                <div className="flex justify-between text-moss">
+                  <span>Discount ({appliedCoupon.percent}%)</span>
+                  <span className="tabular-nums">&minus; {formatINR(subtotal - payable)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-smoke">Shipping</span>
+                <span>Calculated by Razorpay</span>
+              </div>
+              <div className="flex justify-between font-display text-lg pt-3">
+                <span>Total</span>
+                <span className="tabular-nums">{formatINR(payable)}</span>
+              </div>
             </div>
           </aside>
         </div>

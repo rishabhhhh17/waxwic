@@ -13,6 +13,9 @@ type StoredPayload = {
   order_id: string;
   payment_id: string;
   total_paise: number;
+  subtotal_paise?: number;
+  discount_paise?: number;
+  coupon?: { code: string; percent: number; description: string; bumped_to_min: boolean } | null;
   customer: { name: string; email: string };
   shipping: {
     line1: string;
@@ -119,9 +122,23 @@ export function ConfirmationClient({ orderId }: { orderId: string }) {
                 </li>
               ))}
             </ul>
-            <div className="mt-4 flex justify-between font-display text-xl">
-              <span>Total paid</span>
-              <span className="tabular-nums">{formatINR(payload.total_paise)}</span>
+            <div className="mt-4 space-y-1 text-sm">
+              {typeof payload.subtotal_paise === 'number' && payload.coupon && (
+                <>
+                  <div className="flex justify-between text-smoke">
+                    <span>Subtotal</span>
+                    <span className="tabular-nums">{formatINR(payload.subtotal_paise)}</span>
+                  </div>
+                  <div className="flex justify-between text-moss">
+                    <span>Discount ({payload.coupon.code} · {payload.coupon.percent}%)</span>
+                    <span className="tabular-nums">&minus; {formatINR(payload.discount_paise ?? 0)}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between font-display text-xl pt-2">
+                <span>Total paid</span>
+                <span className="tabular-nums">{formatINR(payload.total_paise)}</span>
+              </div>
             </div>
           </div>
         )}

@@ -5,6 +5,7 @@ import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { CartDrawer } from '@/components/CartDrawer';
 import { MetaPixel } from '@/components/MetaPixel';
+import { AnnouncementBar } from '@/components/AnnouncementBar';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${inter.variable} ${cormorant.variable}`}>
       <body className="min-h-screen bg-ivory text-ink antialiased">
         <MetaPixel />
+        <AnnouncementBar />
         <Navbar />
         <main>{children}</main>
         <Footer />
